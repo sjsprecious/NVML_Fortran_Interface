@@ -2,9 +2,11 @@
 #include <nvml.h>
 
 // declaration of functions
-void nvml_init();
-void nvml_stop();
-void check_status(nvmlReturn_t nvmlResult);
+extern "C" {
+  void nvml_init();
+  void nvml_stop();
+  void check_status(nvmlReturn_t nvmlResult);
+}
 
 // define variables for NVML APIs
 unsigned int deviceCount = 0;
