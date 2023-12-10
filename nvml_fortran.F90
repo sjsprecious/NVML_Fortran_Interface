@@ -12,6 +12,9 @@ interface
   subroutine nvml_init_internal() bind(C, name='nvml_init')
   end subroutine 
 
+  subroutine nvml_start_internal() bind(C, name='nvml_start')
+  end subroutine
+
   subroutine nvml_stop_internal() bind(C, name="nvml_stop")
   end subroutine 
 end interface
@@ -23,6 +26,13 @@ contains
   !!!!!!!!!!!!!!!!!!!
   subroutine nvml_init()
     call nvml_init_internal() 
+  end subroutine
+
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  ! Start to collect GPU power usage !
+  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  subroutine nvml_start()
+    call nvml_start_internal()
   end subroutine
 
   !!!!!!!!!!!!!!!!!!
