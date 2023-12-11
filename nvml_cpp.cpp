@@ -43,14 +43,14 @@ void *power_polling_func( void *ptr )
 {
   unsigned int powerlevel = 0;
 
+  // Open the file in append mode
+  std::ofstream file(filepath.c_str(), std::ios::app);
+
   // Acquire the lock before writing to the file
   pthread_mutex_lock(&fileMutex);
 
   while (pollThreadStatus)
   {
-    // Open the file in append mode
-    std::ofstream file(filepath.c_str(), std::ios::app);
-
     // This thread is not cancelable
     int error = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, 0);
     if ( error != 0 )
@@ -75,7 +75,6 @@ void *power_polling_func( void *ptr )
     if (file.is_open())
     {
       file << std::setprecision(3) << powerlevel/1000.0 << "\n";
-      file.close();
     } 
     else
     {
@@ -89,6 +88,9 @@ void *power_polling_func( void *ptr )
     // Wait for this amount of time before next sampling 
     usleep(time_interval);
   }
+
+  // Close the output file
+  file.close();
 
   // Release the lock
   pthread_mutex_unlock(&fileMutex);
