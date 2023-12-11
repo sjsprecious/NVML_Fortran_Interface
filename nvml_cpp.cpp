@@ -34,17 +34,24 @@ nvmlComputeMode_t computemode;
 // Define variables for pthread
 bool pollThreadStatus = false;
 pthread_t powerPollThread;
+pthread_mutex_t fileMutex = PTHREAD_MUTEX_INITIALIZER; // Mutex to synchronize file access
 
 // Use pthread to poll the GPU data obtained from NVML APIs
 void *power_polling_func( void *ptr )
 {
   unsigned int powerlevel = 0;
 
-  // Open the output file
-  FILE *fp = fopen(filepath.c_str(), "w+");
+  // Acquire the lock before writing to the file
+  pthread_mutex_lock(&fileMutex);
 
   while (pollThreadStatus)
   {
+//    std::ofstream file(filepath.c_str(), std::ios::out | std::ios::app); // Open the file in append mode
+    std::ofstream file(filepath.c_str(), std::ios::app); // Open the file in append mode
+
+    // Open the output file
+//    fp = fopen(filepath.c_str(), "w+");
+
     // This thread is not cancelable
     int error = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, 0);
     if ( error != 0 )
@@ -66,16 +73,28 @@ void *power_polling_func( void *ptr )
     }
 
     // The output file stores power in Watts.
-    fprintf(fp, "%.3lf\n", (powerlevel)/1000.0);
+//    fprintf(fp, "%.3lf\n", (powerlevel)/1000.0);
+    if (file.is_open()) {
+        file <<  (powerlevel)/1000.0 << "\n";
+        file.close();
+    } else {
+        std::cout << "Unable to open the file for writing.\n";
+    }
+    std::cout << "after the write..." << std::endl;
 
     // This thread is now cancelable
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, 0);
 
     // Wait for this amount of time before next sampling 
     usleep(time_interval);
+    std::cout << "after the sleep command..." << std::endl;
   }
 
-  fclose(fp);
+  // Release the lock
+  pthread_mutex_unlock(&fileMutex);
+
+//  fclose(fp);
+
   pthread_exit(0);
 }
 
@@ -134,22 +153,43 @@ void nvml_start()
       - some data is written to the output file.
     In this way, we will always get some data even if the measured GPU kernel finishes too fast.
   */
-  std::ifstream file(filepath);
-  // Check if the output file exists
-  bool file_exist = false;
-  while (not file_exist)
-  {
-    if (file.is_open()) file_exist = true;
-  }
-  // Check if the output file is empty
-  bool file_empty = true;
-  while (file_empty)
-  {
-    file.seekg(0, std::ios::end);           // Move to the end of the file
-    std::streampos filesize = file.tellg(); // Get the position (size) of the file
-    if (filesize != 0) file_empty = false;
-  }
-  file.close();
+//  std::ifstream file(filepath);
+//  // Check if the output file exists
+//  std::cout << "start to check the file existence..." << std::endl;
+//  bool file_exist = false;
+//  while (not file_exist)
+//  {
+//    if (file.is_open()) file_exist = true;
+//  }
+//  file.close();
+//  // Check if the output file is empty
+//  std::cout << "start to check the file empty..." << std::endl;
+//  bool file_empty = true;
+//  while (file_empty)
+//  {
+//    if (file.is_open())
+//    {
+//      file.seekg(0, std::ios::end);           // Move to the end of the file
+//      std::streampos filesize = file.tellg(); // Get the position (size) of the file
+//      if (filesize != 0) file_empty = false;
+//      file.close();
+//    }
+//    else
+//    {
+//      std::cout << "Unable to open the file." << std::endl;
+//    }
+//  }
+    for (int i = 0; i < 2; ++i) {
+	int result = pthread_mutex_trylock(&fileMutex);
+	if (result == 0) {
+           // Lock acquired, release immediately to avoid blocking other threads
+           pthread_mutex_unlock(&fileMutex);
+	   std::cout << "File is not being written" << std::endl;
+        } else {
+           std::cout << "File is being written" << std::endl;
+        }
+	sleep(1);
+    }
 }
 
 // End the NVML measurement
