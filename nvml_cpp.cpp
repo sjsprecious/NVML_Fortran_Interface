@@ -177,7 +177,6 @@ void nvml_start( int mpi_rank_id, int device_id )
       if (verbose) std::cout << "Output file is being written" << std::endl;
       file_empty = false;
     }
-    usleep(time_interval);
   }
 }
 
