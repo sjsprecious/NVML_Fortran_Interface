@@ -9,7 +9,10 @@ public
 !!!!!!!!!!!!!!!!!!!!!!!!!!
 
 interface
-  subroutine nvml_start_internal() bind(C, name='nvml_start')
+  subroutine nvml_start_internal(rank_id, gpu_id) bind(C, name='nvml_start')
+    import
+    integer(c_int), value :: rank_id
+    integer(c_int), value :: gpu_id
   end subroutine
 
   subroutine nvml_stop_internal() bind(C, name="nvml_stop")
@@ -21,8 +24,10 @@ contains
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   ! Start to collect GPU power usage !
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  subroutine nvml_start()
-    call nvml_start_internal()
+  subroutine nvml_start(rank_id, gpu_id)
+    integer, intent(in) :: rank_id, gpu_id
+
+    call nvml_start_internal(rank_id, gpu_id)
   end subroutine
 
   !!!!!!!!!!!!!!!!!!

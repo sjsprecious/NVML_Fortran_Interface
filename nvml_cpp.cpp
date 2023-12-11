@@ -1,13 +1,14 @@
 #include <iostream>
 #include <nvml.h>
 #include <pthread.h>
-#include <unistd.h>
-#include <fstream>
-#include <iomanip>
+#include <unistd.h>    // for usleep function
+#include <fstream>     // for ofstream class
+#include <iomanip>     // for setprecision function
+#include <cstdlib>     // for getenv function 
 
 // Declaration of functions
 extern "C" {
-  void nvml_start();
+  void nvml_start( int mpi_rank_id, int device_id );
   void nvml_stop();
 }
 void check_status(nvmlReturn_t nvmlResult);
@@ -17,10 +18,10 @@ void *power_polling_func(void *ptr);
 const bool verbose = false;
 
 // Time interval between two samples of GPU power usage (unit: microseconds)
-const unsigned int time_interval = 200000;
+const unsigned int time_interval = 100000;
 
 // Output file path and name
-const std::string filepath = "./Power_data.txt";
+std::string filepath = "";
 
 // Define variables for NVML APIs
 unsigned int deviceCount = 0;
@@ -54,7 +55,7 @@ void *power_polling_func( void *ptr )
     int error = pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, 0);
     if ( error != 0 )
     {
-      std::cout << "Error: fail to set the pthread state." << std::endl;
+      if (verbose) std::cout << "Error: fail to set the pthread state." << std::endl;
       exit(error);
     }
 
@@ -78,7 +79,8 @@ void *power_polling_func( void *ptr )
     } 
     else
     {
-      std::cout << "Unable to open the file for writing.\n";
+      std::cout << "Unable to open the file for writing. Something is wrong!\n";
+      exit(123);
     }
 
     // This thread is now cancelable
@@ -95,46 +97,54 @@ void *power_polling_func( void *ptr )
 }
 
 // Initialize and start the NVML measurement
-void nvml_start()
+void nvml_start( int mpi_rank_id, int device_id )
 {
   // Initialize nvml.
   nvmlResult = nvmlInit_v2();
   check_status(nvmlResult);
 
-  // Count the number of GPUs available.
-  nvmlResult = nvmlDeviceGetCount( &deviceCount );
-  check_status(nvmlResult);
-
-  for (int i = 0; i < deviceCount; i++)
+  if (mpi_rank_id == 0)
   {
-    // Get the device ID.
-    nvmlResult = nvmlDeviceGetHandleByIndex( i, &nvmlDeviceID );
+    // Count the number of GPUs available.
+    nvmlResult = nvmlDeviceGetCount( &deviceCount );
     check_status(nvmlResult);
 
-    // Get the name of the device.
-    nvmlResult = nvmlDeviceGetName( nvmlDeviceID, deviceNameStr, name_length );
-    check_status(nvmlResult);
-    if (verbose) std::cout << "Device " << i << ", name = " << deviceNameStr << std::endl;
+    for (int i = 0; i < deviceCount; i++)
+    {
+      // Get the device ID.
+      nvmlResult = nvmlDeviceGetHandleByIndex( i, &nvmlDeviceID );
+      check_status(nvmlResult);
 
-    // Get PCI information of the device.
-    nvmlResult = nvmlDeviceGetPciInfo( nvmlDeviceID, &nvmPCIInfo );
-    check_status(nvmlResult);
+      // Get the name of the device.
+      nvmlResult = nvmlDeviceGetName( nvmlDeviceID, deviceNameStr, name_length );
+      check_status(nvmlResult);
+      if (verbose) std::cout << "Device " << i << ", name = " << deviceNameStr << std::endl;
 
-    // Get the compute mode of the device which indicates CUDA capabilities.
-    nvmlResult = nvmlDeviceGetComputeMode( nvmlDeviceID, &computemode );
-    check_status(nvmlResult);
-    if (verbose) std::cout << "Device " << i << ", compute mode = " << computemode << std::endl;
+      // Get PCI information of the device.
+      nvmlResult = nvmlDeviceGetPciInfo( nvmlDeviceID, &nvmPCIInfo );
+      check_status(nvmlResult);
 
-    // Get the power management mode of the GPU.
-    nvmlResult = nvmlDeviceGetPowerManagementMode( nvmlDeviceID, &powermode );
-    check_status(nvmlResult);
-    if (verbose) std::cout << "Device " << i << ", power mode = " << powermode << std::endl;
-  }
+      // Get the compute mode of the device which indicates CUDA capabilities.
+      nvmlResult = nvmlDeviceGetComputeMode( nvmlDeviceID, &computemode );
+      check_status(nvmlResult);
+      if (verbose) std::cout << "Device " << i << ", compute mode = " << computemode << std::endl;
+
+      // Get the power management mode of the GPU.
+      nvmlResult = nvmlDeviceGetPowerManagementMode( nvmlDeviceID, &powermode );
+      check_status(nvmlResult);
+      if (verbose) std::cout << "Device " << i << ", power mode = " << powermode << std::endl;
+    }
+  }   // End of if statement for "mpi_rank_id"
 
   // Change the value of the global variable; may not be refreshed in the child thread yet
   pollThreadStatus = true;
+  filepath = "./power_usage_rank" + std::to_string(mpi_rank_id) +
+	     "_gpu" + std::to_string(device_id) + ".txt";
 
-  nvmlResult = nvmlDeviceGetHandleByIndex(0, &nvmlDeviceID);
+  // Get the device ID.
+  nvmlResult = nvmlDeviceGetHandleByIndex(device_id, &nvmlDeviceID);
+
+  // Generate a new pthread
   int error = pthread_create(&powerPollThread, NULL, power_polling_func, NULL);
   if ( error )
   {
@@ -144,7 +154,7 @@ void nvml_start()
 
   /* 
     The following loop makes sure that:
-      - the global variable is updated in the child thread;
+      - the global variable is updated in the child thread before "nvml_stop" is called;
       - the output file is generated;
       - some data is written to the output file.
     In this way, we will always get some data even if the measured GPU kernel finishes too fast.
@@ -158,11 +168,11 @@ void nvml_start()
     {
       // Lock acquired, release immediately to avoid blocking other threads
       pthread_mutex_unlock(&fileMutex);
-      std::cout << "File is not being written" << std::endl;
+      if (verbose) std::cout << "Output file is not being written" << std::endl;
     }
     else
     {
-      std::cout << "File is being written" << std::endl;
+      if (verbose) std::cout << "Output file is being written" << std::endl;
       file_empty = false;
     }
     usleep(time_interval);
