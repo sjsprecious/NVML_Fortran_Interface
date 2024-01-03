@@ -1,7 +1,8 @@
 import pandas as pd
+import glob
 
-files    = ['gpu_usage_rank0_gpu0.txt', 'gpu_usage_rank1_gpu1.txt',
-            'gpu_usage_rank2_gpu2.txt', 'gpu_usage_rank3_gpu3.txt']
+# Get a list of all txt files in the current directory
+files = glob.glob('*txt')
 
 for f in files:
     # Read the text file into a Pandas DataFrame
