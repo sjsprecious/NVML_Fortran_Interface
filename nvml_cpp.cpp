@@ -184,7 +184,17 @@ void nvml_start( int mpi_rank_id, int device_id )
 
   // Change the value of the global variable; may not be refreshed in the child thread yet
   pollThreadStatus = true;
-  filepath = "./gpu_usage_rank" + std::to_string(mpi_rank_id) +
+  // Use getenv to retrieve the value of the environment variable
+  const char* envname  = "HOSTNAMEx";
+  const char* nodename = std::getenv(envname);
+  std::string prefix = "gpu";
+  if (nodename != nullptr) prefix = std::getenv(envname);
+#ifdef _power
+  std::string usage = "power";
+#else
+  std::string usage = "energy";
+#endif
+  filepath = "./" + prefix + "_" + usage + "_rank" + std::to_string(mpi_rank_id) +
 	     "_gpu" + std::to_string(device_id) + ".txt";
 
   // Get the device ID.
