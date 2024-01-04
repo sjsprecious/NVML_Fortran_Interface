@@ -6,6 +6,7 @@
 #include <iomanip>     // for setprecision function
 #include <cstdlib>     // for getenv function 
 #include <chrono>      // for time stamp
+#include <algorithm>   // for std::remove function
 
 // Declaration of functions
 extern "C" {
@@ -15,6 +16,7 @@ extern "C" {
 void check_status( nvmlReturn_t nvmlResult );
 void *polling_func (void *ptr);
 void collect_gpu_data( std::ofstream &file );
+std::string gethostname();
 
 // Print additional diagnostic output
 const bool verbose = false;
@@ -39,6 +41,38 @@ nvmlComputeMode_t computemode;
 bool pollThreadStatus = false;
 pthread_t PollThread;
 pthread_mutex_t fileMutex = PTHREAD_MUTEX_INITIALIZER; // Mutex to synchronize file access
+
+std::string getHostname()
+{
+  const int buffer_size = 12;
+  char buffer[buffer_size];
+
+  // Open a pipe to the command
+  FILE* pipe = popen("hostname", "r");
+  if (!pipe)
+  {
+    std::cout << "Error opening pipe to hostname command." << std::endl;
+    return "gpu";
+  }
+
+  // Read the output into buffer
+  std::string result;
+  while (!feof(pipe))
+  {
+    if (fgets(buffer, buffer_size, pipe) != nullptr)
+    {
+      result += buffer;
+    }
+  }
+
+  // Close the pipe
+  pclose(pipe);
+
+  // Remove newline character if present
+  auto newend = std::remove(result.begin(), result.end(), '\n');
+  result.erase(newend, result.end());
+  return result;
+}
 
 void collect_gpu_data( std::ofstream &file )
 {
@@ -185,16 +219,13 @@ void nvml_start( int mpi_rank_id, int device_id )
   // Change the value of the global variable; may not be refreshed in the child thread yet
   pollThreadStatus = true;
   // Use getenv to retrieve the value of the environment variable
-  const char* envname  = "HOSTNAME";
-  const char* nodename = std::getenv(envname);
-  std::string prefix = "gpu";
-  if (nodename != nullptr) prefix = std::getenv(envname);
+  std::string nodename = getHostname();
 #ifdef _power
   std::string usage = "power";
 #else
   std::string usage = "energy";
 #endif
-  filepath = "./" + prefix + "_" + usage + "_rank" + std::to_string(mpi_rank_id) +
+  filepath = "./" + nodename + "_" + usage + "_rank" + std::to_string(mpi_rank_id) +
 	     "_gpu" + std::to_string(device_id) + ".txt";
 
   // Get the device ID.
